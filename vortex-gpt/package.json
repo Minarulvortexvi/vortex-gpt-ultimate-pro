@@ -47,4 +47,23 @@
     "@types/file-saver": "^2.0.7",
     "@types/three": "^0.158.0"
   }
+}{
+  "name": "my-project",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "dev": "node index.js"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Minarulvortexvi/vortex-gpt-ultimate-pro.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/Minarulvortexvi/vortex-gpt-ultimate-pro/issues"
+  },
+  "homepage": "https://github.com/Minarulvortexvi/vortex-gpt-ultimate-pro#readme"
 }
