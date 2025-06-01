@@ -1,4 +1,4 @@
-name: NodeJS with Grunt
+name: Node.js CI with Grunt
 
 on:
   push:
@@ -7,26 +7,49 @@ on:
     branches: [ "main" ]
 
 jobs:
-  build:
+  build-and-test:
     runs-on: ubuntu-latest
 
     strategy:
       matrix:
-        node-version: [18.x, 20.x, 22.x]
+        node-version: ["18.x", "20.x", "22.x"]
+        # ক্যাশিং এর জন্য কী ব্যবহার করবে
+        cache: ["npm"]
 
     steps:
-    - uses: actions/checkout@v4
+    - name: Checkout repository
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
 
     - name: Use Node.js ${{ matrix.node-version }}
       uses: actions/setup-node@v4
       with:
         node-version: ${{ matrix.node-version }}
+        cache: ${{ matrix.cache }}
 
     - name: Install dependencies
-      run: npm install
+      run: |
+        npm install
+        npm install grunt --save-dev
+        npm install grunt-cli --save-dev
+        
+    - name: Verify installations
+      run: |
+        node --version
+        npm --version
+        npx grunt --version
 
-    - name: Install Grunt CLI
-      run: npm install --global grunt-cli
-
-    - name: Build
+    - name: Run Grunt tasks
       run: npx grunt --verbose
+      env:
+        CI: true
+
+    - name: Upload build artifacts (if any)
+      if: success()
+      uses: actions/upload-artifact@v4
+      with:
+        name: build-output
+        path: |
+          dist/
+          build/
