@@ -1,55 +1,113 @@
-name: Node.js CI with Grunt
+name: Node.js CI/CD Pipeline with Grunt Builder
+
+description: |
+  This workflow performs the following actions:
+  - Runs on Ubuntu latest runner
+  - Tests compatibility with Node.js versions 18.x, 20.x, and 22.x
+  - Implements smart caching for node_modules
+  - Installs project dependencies including Grunt toolchain
+  - Executes Grunt build tasks with verbose logging
+  - Handles build artifacts and deployment preparation
+  - Includes comprehensive error handling and notifications
 
 on:
   push:
-    branches: [ "main" ]
+    branches: [ "main", "master" ]
+    tags: [ "v*.*.*" ]
   pull_request:
-    branches: [ "main" ]
+    branches: [ "main", "master" ]
+  workflow_dispatch:
 
 jobs:
-  build-and-test:
+  build-test-deploy:
+    name: Build, Test and Prepare Deployment
     runs-on: ubuntu-latest
+    timeout-minutes: 30
 
     strategy:
+      fail-fast: false
       matrix:
         node-version: ["18.x", "20.x", "22.x"]
-        # ক্যাশিং এর জন্য কী ব্যবহার করবে
-        cache: ["npm"]
+        os: [ubuntu-latest]
+
+    env:
+      CI: true
+      NODE_ENV: production
+      GRUNT_LOGLEVEL: verbose
 
     steps:
-    - name: Checkout repository
-      uses: actions/checkout@v4
-      with:
-        fetch-depth: 0
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
 
-    - name: Use Node.js ${{ matrix.node-version }}
-      uses: actions/setup-node@v4
-      with:
-        node-version: ${{ matrix.node-version }}
-        cache: ${{ matrix.cache }}
+      - name: Setup Node.js ${{ matrix.node-version }}
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node-version }}
+          cache: 'npm'
+          cache-dependency-path: 'package-lock.json'
 
-    - name: Install dependencies
-      run: |
-        npm install
-        npm install grunt --save-dev
-        npm install grunt-cli --save-dev
-        
-    - name: Verify installations
-      run: |
-        node --version
-        npm --version
-        npx grunt --version
+      - name: Cache node_modules
+        uses: actions/cache@v4
+        id: cache
+        with:
+          path: |
+            node_modules
+            .cache
+          key: ${{ runner.os }}-node-${{ hashFiles('package-lock.json') }}
 
-    - name: Run Grunt tasks
-      run: npx grunt --verbose
-      env:
-        CI: true
+      - name: Install Dependencies
+        run: |
+          npm ci
+          npm install grunt@latest grunt-cli@latest --save-dev
+          npm list --depth=0
 
-    - name: Upload build artifacts (if any)
-      if: success()
-      uses: actions/upload-artifact@v4
-      with:
-        name: build-output
-        path: |
-          dist/
-          build/
+      - name: Verify Environment
+        run: |
+          node --version
+          npm --version
+          npx grunt --version
+          npx grunt --help
+
+      - name: Run Grunt Build
+        id: grunt-build
+        run: npx grunt build --verbose
+        continue-on-error: false
+
+      - name: Archive Production Build
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-artifacts-${{ matrix.node-version }}
+          path: |
+            dist/
+            build/
+            coverage/
+
+      - name: Notify Success
+        if: success() && github.event_name == 'pull_request'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: '✅ Build succeeded for Node ${{ matrix.node-version }}!'
+            })
+
+      - name: Notify Failure
+        if: failure() && github.event_name == 'pull_request'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: '❌ Build failed for Node ${{ matrix.node-version }}!'
+            })
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
