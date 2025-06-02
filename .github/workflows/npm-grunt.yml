@@ -1,14 +1,13 @@
-name: Node.js CI/CD Pipeline with Grunt Builder
+name: Node.js CI/CD Pipeline with Grunt
 
 description: |
-  This workflow performs the following actions:
-  - Runs on Ubuntu latest runner
-  - Tests compatibility with Node.js versions 18.x, 20.x, and 22.x
-  - Implements smart caching for node_modules
-  - Installs project dependencies including Grunt toolchain
-  - Executes Grunt build tasks with verbose logging
-  - Handles build artifacts and deployment preparation
-  - Includes comprehensive error handling and notifications
+  This workflow:
+  - Supports Node.js versions 18.x, 20.x, and 22.x
+  - Uses smart caching and dependency management
+  - Installs and verifies Grunt toolchain
+  - Runs Grunt build with verbose logging
+  - Archives build artifacts
+  - Posts status notifications for PRs
 
 on:
   push:
@@ -20,7 +19,7 @@ on:
 
 jobs:
   build-test-deploy:
-    name: Build, Test and Prepare Deployment
+    name: Build, Test and Deploy
     runs-on: ubuntu-latest
     timeout-minutes: 30
 
@@ -36,57 +35,57 @@ jobs:
       GRUNT_LOGLEVEL: verbose
 
     steps:
-      - name: Checkout Repository
+      - name: ⬇️ Checkout Repository
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
           persist-credentials: false
 
-      - name: Setup Node.js ${{ matrix.node-version }}
+      - name: 🟢 Setup Node.js ${{ matrix.node-version }}
         uses: actions/setup-node@v4
         with:
           node-version: ${{ matrix.node-version }}
           cache: 'npm'
           cache-dependency-path: 'package-lock.json'
 
-      - name: Cache node_modules
+      - name: 💾 Cache node_modules
         uses: actions/cache@v4
-        id: cache
+        id: node-cache
         with:
           path: |
             node_modules
             .cache
           key: ${{ runner.os }}-node-${{ hashFiles('package-lock.json') }}
 
-      - name: Install Dependencies
+      - name: 📦 Install Dependencies
         run: |
           npm ci
-          npm install grunt@latest grunt-cli@latest --save-dev
+          npm install grunt grunt-cli --save-dev
           npm list --depth=0
 
-      - name: Verify Environment
+      - name: ✅ Verify Environment
         run: |
-          node --version
-          npm --version
+          node -v
+          npm -v
           npx grunt --version
           npx grunt --help
 
-      - name: Run Grunt Build
+      - name: 🏗️ Run Grunt Build
         id: grunt-build
         run: npx grunt build --verbose
         continue-on-error: false
 
-      - name: Archive Production Build
+      - name: 📦 Archive Build Artifacts
         if: success()
         uses: actions/upload-artifact@v4
         with:
-          name: build-artifacts-${{ matrix.node-version }}
+          name: build-output-${{ matrix.node-version }}
           path: |
             dist/
             build/
             coverage/
 
-      - name: Notify Success
+      - name: ✅ Notify Build Success
         if: success() && github.event_name == 'pull_request'
         uses: actions/github-script@v7
         with:
@@ -95,10 +94,10 @@ jobs:
               issue_number: context.issue.number,
               owner: context.repo.owner,
               repo: context.repo.repo,
-              body: '✅ Build succeeded for Node ${{ matrix.node-version }}!'
+              body: '✅ CI Passed for Node.js `${{ matrix.node-version }}`!'
             })
 
-      - name: Notify Failure
+      - name: ❌ Notify Build Failure
         if: failure() && github.event_name == 'pull_request'
         uses: actions/github-script@v7
         with:
@@ -107,7 +106,7 @@ jobs:
               issue_number: context.issue.number,
               owner: context.repo.owner,
               repo: context.repo.repo,
-              body: '❌ Build failed for Node ${{ matrix.node-version }}!'
+              body: '❌ CI Failed for Node.js `${{ matrix.node-version }}`. Please check the logs.'
             })
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
